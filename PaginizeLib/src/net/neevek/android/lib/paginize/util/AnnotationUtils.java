@@ -1,9 +1,10 @@
 package net.neevek.android.lib.paginize.util;
 
+import android.os.Build;
 import android.text.TextWatcher;
 import android.view.View;
-import net.neevek.android.lib.paginize.annotation.ListenerDefs;
 import net.neevek.android.lib.paginize.annotation.InjectView;
+import net.neevek.android.lib.paginize.annotation.ListenerDefs;
 import net.neevek.android.lib.paginize.annotation.SetListeners;
 import net.neevek.android.lib.paginize.exception.NotImplementedInterfaceException;
 
@@ -39,11 +40,17 @@ import java.util.Map;
  * @see net.neevek.android.lib.paginize.ViewWrapper
  * @see net.neevek.android.lib.paginize.PageActivity
  */
-public class AnnotationUtils {
+public final class AnnotationUtils {
   private static Map<Class, String> sSetListenerMethodMap = new HashMap<Class, String>();
 
   static {
     sSetListenerMethodMap.put(TextWatcher.class, "addTextChangedListener");
+    if (Build.VERSION.SDK_INT >= 11) {
+      sSetListenerMethodMap.put(View.OnLayoutChangeListener.class, "addOnLayoutChangeListener");
+    }
+    if (Build.VERSION.SDK_INT >= 12) {
+      sSetListenerMethodMap.put(View.OnAttachStateChangeListener.class, "addOnAttachStateChangeListener");
+    }
   }
 
   private static void setListenersForView(View view, Class[] listenerTypes, Object listener) throws InvocationTargetException
@@ -53,7 +60,8 @@ public class AnnotationUtils {
       Class listenerClass = listenerTypes[j];
 
       if (!listenerClass.isAssignableFrom(listener.getClass())) {
-        throw new NotImplementedInterfaceException(listener.getClass().getName() + " does not implement " + listenerClass.getName());
+        throw new NotImplementedInterfaceException("When injecting listener for view 0x" + Integer.toHexString(view.getId()) + ", we find that "
+            + listener.getClass().getName() + " does not implement " + listenerClass.getName());
       }
 
       String methodName = sSetListenerMethodMap.get(listenerClass);
@@ -76,12 +84,12 @@ public class AnnotationUtils {
         method.invoke(view, listener);
       } catch (NoSuchMethodException e) {
         throw new NoSuchMethodException("No such method: " + listenerClass.getSimpleName() + "." + methodName
-            + ", you have to manually add the set-listener method to sSetListenerMethodMap.");
+            + ", you have to manually add the set-listener method to sSetListenerMethodMap to support injecting listener for view 0x" + Integer.toHexString(view.getId()));
       }
     }
   }
 
-  public static void handleAnnotatedPageConstructors(Class clazz, Object object, ViewFinder viewFinder) throws InvocationTargetException
+  public static void handleAnnotatedConstructors(Class clazz, Object object, ViewFinder viewFinder, boolean initForLazy) throws InvocationTargetException
       , IllegalAccessException, NoSuchMethodException, InstantiationException {
 
     Constructor[] constructors = clazz.getConstructors();
@@ -106,9 +114,21 @@ public class AnnotationUtils {
         Annotation[] setListenerAnnoArray = annoContainer.value();
         for (int k = 0; k < setListenerAnnoArray.length; ++k) {
           SetListeners setListenersAnno = (SetListeners) setListenerAnnoArray[k];
+
+          if ((!initForLazy && setListenersAnno.lazy()) || (initForLazy && !setListenersAnno.lazy())) {
+            continue;
+          }
+
           View view = viewFinder.findViewById(setListenersAnno.view());
           if (view == null) {
-            throw new IllegalArgumentException("The view specified in @SetListeners is not found.");
+            if (initForLazy && setListenersAnno.lazy()) {
+              // view == null is tolerable in this case, we assume that this field
+              // be injected later with another call to ViewWrapper.lazyInitializeLayout().
+              continue;
+            }
+
+            throw new IllegalArgumentException("The view specified in @SetListeners is not found: 0x" + Integer.toHexString(setListenersAnno.view()) +
+                ", if this field is meant to be injected lazily, remember to specify the 'lazy' attribute.");
           }
 
           Object targetListener = getTargetListener(clazz, object, targetListenerCache, setListenersAnno.listener(), "@SetListeners");
@@ -124,7 +144,7 @@ public class AnnotationUtils {
     }
   }
 
-  public static void initAnnotatedFields(Class clazz, Object object, ViewFinder viewFinder) throws InvocationTargetException
+  public static void initAnnotatedFields(Class clazz, Object object, ViewFinder viewFinder, boolean initForLazy) throws InvocationTargetException
       , IllegalAccessException, NoSuchMethodException, InstantiationException {
     Field fields[] = clazz.getDeclaredFields();
 
@@ -145,21 +165,53 @@ public class AnnotationUtils {
           continue;
         }
 
-        InjectView annotation = (InjectView) anno;
-        View view = viewFinder.findViewById(annotation.value());
-        field.setAccessible(true);
-        field.set(object, view);
+        InjectView injectViewAnno = (InjectView) anno;
+        if ((!initForLazy && injectViewAnno.lazy()) || (initForLazy && !injectViewAnno.lazy())) {
+          continue;
+        }
 
-        Class[] listenerTypes = annotation.listenerTypes();
+        View view = viewFinder.findViewById(injectViewAnno.value());
+        if (view == null) {
+          if (initForLazy && injectViewAnno.lazy()) {
+            // view == null is tolerable in this case, we assume that this field
+            // be injected later with another call to ViewWrapper.lazyInitializeLayout().
+            continue;
+          }
+
+          throw new IllegalArgumentException("View 0x"+ Integer.toHexString(injectViewAnno.value()) +" specified in @InjectView on this field is not found: " + field.getName()
+              + ", if this field is meant to be injected lazily, remember to specify the 'lazy' attribute.");
+        }
+
+        try {
+          field.setAccessible(true);
+          field.set(object, view);
+
+        } catch (IllegalAccessException e) {
+          String errMsg = "@InjectView() on '" + field.getName() + "' failed. ";
+          if (field.getType() != view.getClass()) {
+            errMsg += (view.getClass().getSimpleName() + " cannot be cast to " + field.getType().getSimpleName());
+          }
+          throw new IllegalAccessException(errMsg);
+
+        } catch (IllegalArgumentException e) {
+          String errMsg = "@InjectView() on '" + field.getName() + "' failed. ";
+          if (field.getType() != view.getClass()) {
+            errMsg += (view.getClass().getSimpleName() + " cannot be cast to " + field.getType().getSimpleName());
+          }
+          throw new IllegalArgumentException(errMsg);
+        }
+
+
+        Class[] listenerTypes = injectViewAnno.listenerTypes();
         if (listenerTypes == null || listenerTypes.length == 0) {
           continue;
         }
 
-        Object targetListener = getTargetListener(clazz, object, targetListenerCache, annotation.listener(), "@InjectView");
+        Object targetListener = getTargetListener(clazz, object, targetListenerCache, injectViewAnno.listener(), "@InjectView");
         if (targetListener == null) {
           targetListener = object;
         }
-        AnnotationUtils.setListenersForView(view, annotation.listenerTypes(), targetListener);
+        AnnotationUtils.setListenersForView(view, injectViewAnno.listenerTypes(), targetListener);
 
       }
     }
@@ -194,7 +246,7 @@ public class AnnotationUtils {
 
         targetListenerCache.put(targetListenerClass, targetListener);
       } catch (NoSuchMethodException e) {
-        throw new IllegalArgumentException("The 'listener' field in " + tag + " must contain a default constructor without arguments.");
+        throw new IllegalArgumentException("The 'listener' field: '"+ targetListenerClass.getSimpleName() +"' in " + tag + " must contain a default constructor without arguments.");
       }
     }
 

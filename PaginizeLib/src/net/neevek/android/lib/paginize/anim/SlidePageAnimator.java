@@ -12,10 +12,10 @@ import net.neevek.android.lib.paginize.Page;
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
-
+ * <p/>
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
-
+ * <p/>
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -25,7 +25,7 @@ import net.neevek.android.lib.paginize.Page;
  * THE SOFTWARE.
  */
 
-public class SlidePageAnimator implements PageAnimator {
+public final class SlidePageAnimator implements PageAnimator {
   private final static int ANIMATION_DURATION = 250;
   private Animation mPushInFromRightAnimation;
   private Animation mPullOutFromRightAnimation;
@@ -52,30 +52,34 @@ public class SlidePageAnimator implements PageAnimator {
   }
 
   @Override
-  public boolean onPushPageAnimation(Page oldPage, Page newPage, boolean hint) {
-    if (oldPage != null) {
-      oldPage.getView().startAnimation(mPullOutFromRightAnimation);
-    }
-
-    if (hint) {
-      newPage.getView().startAnimation(mPushInFromLeftAnimation);
-    } else {
+  public boolean onPushPageAnimation(Page oldPage, Page newPage, AnimationDirection animationDirection) {
+    if (animationDirection == AnimationDirection.FROM_RIGHT) {
+      if (oldPage != null) {
+        oldPage.getView().startAnimation(mPullOutFromRightAnimation);
+      }
       newPage.getView().startAnimation(mPushInFromRightAnimation);
+    } else {
+      if (oldPage != null) {
+        oldPage.getView().startAnimation(mPullOutFromLeftAnimation);
+      }
+      newPage.getView().startAnimation(mPushInFromLeftAnimation);
     }
 
     return true;
   }
 
   @Override
-  public boolean onPopPageAnimation(Page oldPage, Page newPage, boolean hint) {
-    if (hint) {
+  public boolean onPopPageAnimation(Page oldPage, Page newPage, AnimationDirection animationDirection) {
+    if (animationDirection == AnimationDirection.FROM_LEFT) {
       oldPage.getView().startAnimation(mPullOutFromLeftAnimation);
+      if (newPage != null) {
+        newPage.getView().startAnimation(mPushInFromLeftAnimation);
+      }
     } else {
       oldPage.getView().startAnimation(mPullOutFromRightAnimation);
-    }
-
-    if (newPage != null) {
-      newPage.getView().startAnimation(mPushInFromLeftAnimation);
+      if (newPage != null) {
+        newPage.getView().startAnimation(mPushInFromRightAnimation);
+      }
     }
 
     return true;

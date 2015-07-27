@@ -26,15 +26,15 @@ import net.neevek.android.lib.paginize.anim.PageAnimator;
 /**
  * A Page encapsulates a View(usually a layout with complex UI components),
  * which is to be put into a ViewGroup and finally be shown on screen.
- *
+ * <p/>
  * Page is managed by PageManager, we call variants of the PageManager.pushPage()
  * method to put a Page in a stack, which is maintained by PageManager
- *
+ * <p/>
  * A Page is designed to wrap a full screen View(the status bar is not counted
  * in here), as compared to InnerPage, which wraps a View that occupies only part
  * of the screen.
  *
- * @see net.neevek.android.lib.paginize.InnerPageContainer
+ * @see ContainerPage
  * @see net.neevek.android.lib.paginize.InnerPage
  */
 public abstract class Page extends ViewWrapper implements PageAnimator {
@@ -52,29 +52,23 @@ public abstract class Page extends ViewWrapper implements PageAnimator {
     super(pageActivity);
   }
 
-  public void setType(TYPE type) {
+  protected void setType(TYPE type) {
     mType = type;
   }
 
-  public TYPE getType() {
+  protected TYPE getType() {
     return mType;
   }
 
-  // returns true so PageManager will keep only one instance of a certain type of Page
-  // when multiple instances of that type of Page are pushed continuously onto the page stack.
-  public boolean keepSingleInstance() {
-    return false;
-  }
-
-  public Object getReturnData() {
+  protected Object getReturnData() {
     return mReturnData;
   }
 
-  public void setReturnData(Object data) {
+  protected void setReturnData(Object data) {
     mReturnData = data;
   }
 
-  public PageManager getPageManager() {
+  protected PageManager getPageManager() {
     return getContext().getPageManager();
   }
 
@@ -83,35 +77,25 @@ public abstract class Page extends ViewWrapper implements PageAnimator {
   }
 
   public void show(Object arg, boolean animated) {
-    show(arg, animated, false);
-  }
-
-  public void show(Object arg, boolean animated, boolean hint) {
-    getPageManager().pushPage(this, arg, animated, hint);
+    getPageManager().pushPage(this, arg, animated);
   }
 
   protected void hide(boolean animated) {
     if (getPageManager().getTopPage() == this) {
-      getPageManager().popPage(animated, false);
+      getPageManager().popPage(animated);
     }
   }
 
-  protected void hide(boolean animated, boolean hint) {
-    if (getPageManager().getTopPage() == this) {
-      getPageManager().popPage(animated, hint);
-    }
+  protected void hideDelayed(final boolean animated) {
+    hideDelayed(animated, 500);
   }
 
-  protected void hideDelayed(final boolean animated, final boolean hint) {
-    hideDelayed(animated, hint, 500);
-  }
-
-  protected void hideDelayed(final boolean animated, final boolean hint, int delayed) {
+  protected void hideDelayed(final boolean animated, int delayed) {
     if (getPageManager().getTopPage() == this) {
       getView().postDelayed(new Runnable() {
         @Override
         public void run() {
-          getPageManager().popPage(animated, hint);
+          getPageManager().popPage(animated);
         }
       }, delayed);
     }
@@ -122,12 +106,12 @@ public abstract class Page extends ViewWrapper implements PageAnimator {
   }
 
   @Override
-  public boolean onPushPageAnimation(Page oldPage, Page newPage, boolean hint) {
+  public boolean onPushPageAnimation(Page oldPage, Page newPage, AnimationDirection animationDirection) {
     return false;
   }
 
   @Override
-  public boolean onPopPageAnimation(Page oldPage, Page newPage, boolean hint) {
+  public boolean onPopPageAnimation(Page oldPage, Page newPage, AnimationDirection animationDirection) {
     return false;
   }
 

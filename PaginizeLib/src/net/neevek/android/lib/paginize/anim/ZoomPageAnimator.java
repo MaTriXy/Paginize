@@ -14,10 +14,10 @@ import net.neevek.android.lib.paginize.Page;
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
-
+ * <p/>
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
-
+ * <p/>
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -27,7 +27,7 @@ import net.neevek.android.lib.paginize.Page;
  * THE SOFTWARE.
  */
 
-public class ZoomPageAnimator implements PageAnimator {
+public final class ZoomPageAnimator implements PageAnimator {
   private final static int ANIMATION_DURATION = 200;
   private Animation mInAnimation;
   private Animation mOutAnimation;
@@ -55,14 +55,14 @@ public class ZoomPageAnimator implements PageAnimator {
   }
 
   @Override
-  public boolean onPushPageAnimation(Page oldPage, Page newPage, boolean hint) {
+  public boolean onPushPageAnimation(Page oldPage, Page newPage, AnimationDirection animationDirection) {
     newPage.getView().startAnimation(mInAnimation);
 
     return true;
   }
 
   @Override
-  public boolean onPopPageAnimation(Page oldPage, Page newPage, boolean hint) {
+  public boolean onPopPageAnimation(Page oldPage, Page newPage, AnimationDirection animationDirection) {
     oldPage.getView().startAnimation(mOutAnimation);
 
     return true;

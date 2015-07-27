@@ -8,7 +8,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import net.neevek.android.lib.paginize.annotation.InheritPageLayout;
+import net.neevek.android.lib.paginize.annotation.InsertPageLayout;
 import net.neevek.android.lib.paginize.annotation.PageLayout;
 import net.neevek.android.lib.paginize.exception.InjectFailedException;
 import net.neevek.android.lib.paginize.util.AnnotationUtils;
@@ -53,6 +53,7 @@ public abstract class ViewWrapper {
    */
   protected PageActivity mContext;
   private View mView;
+  View mViewCurrentFocus;
 
   public ViewWrapper(PageActivity pageActivity) {
     mContext = pageActivity;
@@ -81,16 +82,16 @@ public abstract class ViewWrapper {
         // -2 because a Page with @PageLayout should not have @InheritPageLayout, which will be silently ignored.
         for (int i = list.size() - 2; i >= 0; --i) {
           clazz = list.get(i);
-          if (clazz.isAnnotationPresent(InheritPageLayout.class)) {
-            InheritPageLayout inheritPageLayoutAnno = (InheritPageLayout) clazz.getAnnotation(InheritPageLayout.class);
-            if (inheritPageLayoutAnno.root() != -1) {
-              ViewGroup root = (ViewGroup) mView.findViewById(inheritPageLayoutAnno.root());
+          if (clazz.isAnnotationPresent(InsertPageLayout.class)) {
+            InsertPageLayout insertPageLayoutAnno = (InsertPageLayout) clazz.getAnnotation(InsertPageLayout.class);
+            if (insertPageLayoutAnno.parent() != -1) {
+              ViewGroup root = (ViewGroup) mView.findViewById(insertPageLayoutAnno.parent());
               if (root == null) {
-                throw new IllegalArgumentException("The root specified in @InheritPageLayout is not found.");
+                throw new IllegalArgumentException("The parent specified in @InheritPageLayout is not found.");
               }
-              mContext.getLayoutInflater().inflate(inheritPageLayoutAnno.value(), root, true);
+              mContext.getLayoutInflater().inflate(insertPageLayoutAnno.value(), root, true);
             } else {
-              mContext.getLayoutInflater().inflate(inheritPageLayoutAnno.value(), (ViewGroup) mView, true);
+              mContext.getLayoutInflater().inflate(insertPageLayoutAnno.value(), (ViewGroup) mView, true);
             }
           }
         }
@@ -103,14 +104,37 @@ public abstract class ViewWrapper {
       };
 
       for (int i = list.size() - 1; i >= 0; --i) {
-        AnnotationUtils.initAnnotatedFields(list.get(i), this, viewFinder);
-        AnnotationUtils.handleAnnotatedPageConstructors(list.get(i), this, viewFinder);
+        AnnotationUtils.initAnnotatedFields(list.get(i), this, viewFinder, false);
+        AnnotationUtils.handleAnnotatedConstructors(list.get(i), this, viewFinder, false);
       }
 
     } catch (Exception e) {
       e.printStackTrace();
       throw new InjectFailedException(e);
     }
+  }
+
+  /**
+   * inject views after the ViewWrapper is constructed
+   */
+  protected View lazyInitializeLayout(int layoutResId) {
+    final View view = mContext.getLayoutInflater().inflate(layoutResId, null, false);
+    ViewFinder viewFinder = new ViewFinder() {
+      public View findViewById(int id) {
+        return view.findViewById(id);
+      }
+    };
+
+    try {
+      AnnotationUtils.initAnnotatedFields(getClass(), this, viewFinder, true);
+      AnnotationUtils.handleAnnotatedConstructors(getClass(), this, viewFinder, true);
+
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw new InjectFailedException(e);
+    }
+
+    return view;
   }
 
   public PageActivity getContext() {
@@ -121,19 +145,19 @@ public abstract class ViewWrapper {
     return mView;
   }
 
-  public View findViewById(int id) {
+  protected View findViewById(int id) {
     return mView.findViewById(id);
   }
 
-  public String getString(int resId) {
+  protected String getString(int resId) {
     return mContext.getString(resId);
   }
 
-  public String getString(int resId, Object... args) {
+  protected String getString(int resId, Object... args) {
     return mContext.getString(resId, args);
   }
 
-  public Resources getResources() {
+  protected Resources getResources() {
     return mContext.getResources();
   }
 
@@ -141,18 +165,18 @@ public abstract class ViewWrapper {
     mContext.hideTopPage();
   }
 
-  public boolean isAttached() {
+  protected boolean isAttached() {
     return mView.getParent() != null;
   }
 
-  public boolean post(Runnable action) {
+  protected boolean post(Runnable action) {
     if (mView != null) {
       return mView.post(action);
     }
     return false;
   }
 
-  public boolean postDelayed(Runnable action, long delayMillis) {
+  protected boolean postDelayed(Runnable action, long delayMillis) {
     if (mView != null) {
       return mView.postDelayed(action, delayMillis);
     }
@@ -160,32 +184,48 @@ public abstract class ViewWrapper {
   }
 
   /**
-   * called when added to the view hierarchy of the host activity
+   * onShow is called when the page is pushed on the page stack,
+   * at this point the Page is still not be visible
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onAttach() { }
-
-  /**
-   * called when removed from the view hierarchy of the host activity
-   *
-   * @see net.neevek.android.lib.paginize.PageManager
-   */
-  public void onDetach() { }
+  public void onShow(Object arg) {
+  }
 
   /**
    * onShown is called after the page is pushed on the page stack
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onShown(Object arg) { }
+  public void onShown(Object arg) {
+  }
+
+  /**
+   * onHide is called before the page is popped out of the page stack,
+   * at this point the Page is still visible
+   *
+   * @see net.neevek.android.lib.paginize.PageManager
+   */
+  public void onHide() {
+  }
 
   /**
    * onHidden is called after the page is popped out of the page stack
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onHidden() { }
+  public void onHidden() {
+  }
+
+  /**
+   * onCover is called for the current ViewWrapper before a new
+   * ViewWrapper is pushed on the page stack
+   *
+   * @see net.neevek.android.lib.paginize.PageManager
+   */
+  public void onCover() {
+    mViewCurrentFocus = getContext().getCurrentFocus();
+  }
 
   /**
    * onCovered is called for the current ViewWrapper when a new
@@ -193,7 +233,20 @@ public abstract class ViewWrapper {
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onCovered() { }
+  public void onCovered() {
+  }
+
+  /**
+   * onUncovered is called for the previous page before the current page
+   * is popped out of the page stack
+   *
+   * @see net.neevek.android.lib.paginize.PageManager
+   */
+  public void onUncover(Object arg) {
+    if (mViewCurrentFocus != null) {
+      mViewCurrentFocus.requestFocus();
+    }
+  }
 
   /**
    * onUncovered is called for the previous page when the current page
@@ -201,7 +254,8 @@ public abstract class ViewWrapper {
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onUncovered(Object arg) { }
+  public void onUncovered(Object arg) {
+  }
 
   /**
    * onBackPressed mirrors Activity.onBackPressed, only the current
@@ -229,7 +283,8 @@ public abstract class ViewWrapper {
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onActivityResult(int requestCode, int resultCode, Intent data) { }
+  public void onActivityResult(int requestCode, int resultCode, Intent data) {
+  }
 
   /**
    * onPause mirrors Activity.onPause, only the current page
@@ -237,7 +292,8 @@ public abstract class ViewWrapper {
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onPause() { }
+  public void onPause() {
+  }
 
   /**
    * onResume mirrors Activity.onResume, only the current page
@@ -245,35 +301,43 @@ public abstract class ViewWrapper {
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onResume() { }
+  public void onResume() {
+  }
 
   /**
    * onResume mirrors Activity.onKeyDown
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public boolean onKeyDown(int keyCode, KeyEvent event) { return false; }
+  public boolean onKeyDown(int keyCode, KeyEvent event) {
+    return false;
+  }
 
   /**
    * onResume mirrors Activity.onKeyUp
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public boolean onKeyUp(int keyCode, KeyEvent event) { return false; }
+  public boolean onKeyUp(int keyCode, KeyEvent event) {
+    return false;
+  }
 
   /**
    * onResume mirrors Activity.onTouchEvent
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public boolean onTouchEvent(MotionEvent event) { return false; }
+  public boolean onTouchEvent(MotionEvent event) {
+    return false;
+  }
 
   /**
    * onResume mirrors Activity.onConfigurationChanged
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onConfigurationChanged(Configuration newConfig) { }
+  public void onConfigurationChanged(Configuration newConfig) {
+  }
 
   /**
    * onResume mirrors Activity.onSaveInstanceState
@@ -281,7 +345,6 @@ public abstract class ViewWrapper {
    * @see net.neevek.android.lib.paginize.PageManager
    */
   public void onSaveInstanceState(Bundle outState) {
-    System.out.println(">>>>>>>>>>>>> page onSaveInstanceState: " + getClass());
   }
 
   /**
@@ -289,5 +352,10 @@ public abstract class ViewWrapper {
    *
    * @see net.neevek.android.lib.paginize.PageManager
    */
-  public void onRestoreInstanceState(Bundle savedInstanceState) { }
+  public void onRestoreInstanceState(Bundle savedInstanceState) {
+  }
+
+  public boolean shouldSaveInstanceState() {
+    return true;
+  }
 }

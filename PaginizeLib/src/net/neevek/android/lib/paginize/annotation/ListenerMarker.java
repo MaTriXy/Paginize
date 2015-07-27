@@ -1,4 +1,9 @@
-package net.neevek.android.lib.paginize;
+package net.neevek.android.lib.paginize.annotation;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * Copyright (c) 2015 neevek <i@neevek.net>
@@ -22,13 +27,13 @@ package net.neevek.android.lib.paginize;
  */
 
 /**
- * This interface is used to communicate between two pages.
- * The use of this interface is not mandated, it is declared like so
- * to make things consistent.
+ * A marker annotation used on listener class for @InjectView and @SetListeners
+ * This annotation is supposed to be put in proguard-project.txt to avoid obfuscation
  *
- * @see net.neevek.android.lib.paginize.Page
- * @see net.neevek.android.lib.paginize.anim.PageAnimator
+ * @see net.neevek.android.lib.paginize.annotation.SetListeners
+ * @see net.neevek.android.lib.paginize.ViewWrapper
  */
-public interface PageDataCallback<T> {
-  void onPageDataReturned(T data);
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.TYPE)
+public @interface ListenerMarker {
 }

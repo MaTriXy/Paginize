@@ -1,9 +1,4 @@
-package net.neevek.android.lib.paginize.annotation;
-
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+package net.neevek.android.lib.paginize;
 
 /**
  * Copyright (c) 2015 neevek <i@neevek.net>
@@ -26,18 +21,12 @@ import java.lang.annotation.Target;
  * THE SOFTWARE.
  */
 
-/**
- * used to inherit layout of the parent Page
- *
- * @see net.neevek.android.lib.paginize.ViewWrapper
- * @see net.neevek.android.lib.paginize.util.AnnotationUtils
- */
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface InheritPageLayout {
-  int value();
+interface ViewPagerPageScrollListener {
+    public static final int SCROLL_STATE_IDLE = 0;
+    public static final int SCROLL_STATE_DRAGGING = 1;
+    public static final int SCROLL_STATE_SETTLING = 2;
 
-  // -1 if the specified layout is to be appended to root
-  // of the inherited layout
-  int root() default -1;
+    void onPageScrolled(int index, float indexOffset, int indexOffsetPixels);
+    void onPageSelected(int position);
+    void onPageScrollStateChanged(int state);
 }

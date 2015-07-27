@@ -27,15 +27,17 @@ import java.lang.annotation.Target;
  */
 
 /**
- * Used to inject a ViewPager in a ViewPagerPage or ViewPagerInnerPage
- * This annotation can only used in classes that extend ViewPage or
- * ViewPagerInnerPage. annotating on any other class is a no-op.
+ * used to insert the specified layout to that of the parent Page
  *
- * @see net.neevek.android.lib.paginize.ViewPagerPage
- * @see net.neevek.android.lib.paginize.ViewPagerInnerPage
+ * @see net.neevek.android.lib.paginize.ViewWrapper
+ * @see net.neevek.android.lib.paginize.util.AnnotationUtils
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface ViewPagerResId {
+public @interface InsertPageLayout {
   int value();
+
+  // -1 if the specified layout is to be appended to parent
+  // of the inherited layout
+  int parent() default -1;
 }

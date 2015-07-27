@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -43,13 +44,16 @@ import java.util.LinkedList;
  * @see net.neevek.android.lib.paginize.Page
  * @see net.neevek.android.lib.paginize.anim.PageAnimator
  */
-public class PageManager {
+public final class PageManager {
   private final String SAVE_PAGE_STACK_KEY = "_paginize_page_stack";
   private final String TAG = PageManager.class.getSimpleName();
-  private final boolean DEBUG = true;
 
   private PageActivity mPageActivity;
   private ViewGroup mContainerView;
+  private boolean mEnableDebug;
+
+  // a mask view that intercepts all touch events when a page is in a process of pushing or popping
+  private View mViewTransparentMask;
 
   // the stack to hold the pages
   private LinkedList<Page> mPageStack = new LinkedList<Page>();
@@ -60,6 +64,8 @@ public class PageManager {
   // the PageAnimator to use to animate transitions when swapping pages
   private PageAnimator mPageAnimator;
 
+  private boolean mAnimating;
+
   public PageManager(PageActivity pageActivity, ViewGroup containerView) {
     this(pageActivity, containerView, null);
   }
@@ -68,6 +74,21 @@ public class PageManager {
     mPageActivity = pageActivity;
     mContainerView = containerView;
     mPageAnimator = pageAnimator;
+
+    mViewTransparentMask = new View(pageActivity);
+    mViewTransparentMask.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    mViewTransparentMask.setOnTouchListener(new View.OnTouchListener() {
+      @Override
+      public boolean onTouch(View v, MotionEvent event) {
+        // intercept all touch events
+        return true;
+      }
+    });
+    containerView.addView(mViewTransparentMask);
+  }
+
+  public void setDebug(boolean debug) {
+      mEnableDebug = debug;
   }
 
   public void setPageAnimator(PageAnimator pageAnimator) {
@@ -78,44 +99,106 @@ public class PageManager {
     return mPageAnimator;
   }
 
+  public void pushPages(Page[] pages) {
+    pushPages(pages, null, false, PageAnimator.AnimationDirection.FROM_RIGHT);
+  }
+
+  public void pushPages(Page[] pages, Object arg, boolean animated) {
+    pushPages(pages, arg, animated, PageAnimator.AnimationDirection.FROM_RIGHT);
+  }
+
+  /**
+   * 'arg' will be passed to the last page in the array
+   **/
+  public void pushPages(Page[] pages, Object arg, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (pages == null || pages.length == 0) {
+      return;
+    }
+
+    Page firstOldPage = mCurPage;
+    Page tmpOldPage = null;
+    for (int i = 0; i < pages.length - 1; ++i) {
+      pushPageInternal(pages[i], tmpOldPage, null, false, animationDirection);
+      tmpOldPage = pages[i];
+    }
+    pushPageInternal(pages[pages.length - 1], firstOldPage, arg, animated, animationDirection);
+  }
+
+  public void pushPages(Pair<Page, Object>[] pagePacks) {
+    pushPages(pagePacks, false, PageAnimator.AnimationDirection.FROM_RIGHT);
+  }
+
+  public void pushPages(Pair<Page, Object>[] pagePacks, boolean animated) {
+    pushPages(pagePacks, animated, PageAnimator.AnimationDirection.FROM_RIGHT);
+  }
+
+  public void pushPages(Pair<Page, Object>[] pagePacks, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (pagePacks == null || pagePacks.length == 0) {
+      return;
+    }
+
+    Page firstOldPage = mCurPage;
+    Page tmpOldPage = null;
+    for (int i = 0; i < pagePacks.length - 1; ++i) {
+      Pair<Page, Object> pagePack = pagePacks[i];
+      if (pagePack.first == null) {
+        continue;
+      }
+      pushPageInternal(pagePack.first, tmpOldPage, pagePack.second, false, animationDirection);
+      tmpOldPage = pagePack.first;
+    }
+
+    Pair<Page, Object> lastPagePack = pagePacks[pagePacks.length - 1];
+    if (lastPagePack.first != null) {
+      pushPageInternal(lastPagePack.first, firstOldPage, lastPagePack.second, animated, animationDirection);
+    }
+  }
+
   public void pushPage(Page page) {
-    pushPage(page, null, false);
+    pushPage(page, null, false, PageAnimator.AnimationDirection.FROM_RIGHT);
   }
 
-  public void pushPage(Page page, Object arg, boolean animated) {
-    pushPage(page, arg, animated, false);
+  public void pushPage(Page newPage, Object arg, boolean animated) {
+    pushPage(newPage, arg, animated, PageAnimator.AnimationDirection.FROM_RIGHT);
   }
 
-  public void pushPage(final Page newPage, final Object arg, boolean animated, boolean hint) {
+  public void pushPage(Page newPage, Object arg, boolean animated, PageAnimator.AnimationDirection animationDirection) {
     if (newPage == mCurPage) {
       return;
     }
 
-    final Page oldPage = mCurPage;
+    pushPageInternal(newPage, mCurPage, arg, animated, animationDirection);
+  }
+
+  private void pushPageInternal(final Page newPage, final Page oldPage, final Object arg, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (animated) {
+      mAnimating = true;
+    }
+
+    newPage.onShow(arg);
+
+    if (oldPage != null) {
+      if (animated) {
+        // when a new page is being pushed, ensures the oldPage always be visible during the animation
+        // transition if animated is true
+        oldPage.getView().bringToFront();
+      }
+
+      oldPage.onCover();
+    }
 
     mCurPage = newPage;
     mPageStack.addLast(newPage);
     mContainerView.addView(newPage.getView());
-    newPage.onAttach();
 
-    if (DEBUG) {
+    mViewTransparentMask.bringToFront();
+
+    if (mEnableDebug) {
       Log.d(TAG, String.format(">>>> pushPage, pagestack=%d, %s, arg=%s", mPageStack.size(), newPage, arg));
     }
 
-    if (oldPage != null) {
-      if (newPage.keepSingleInstance() && newPage.getClass() == oldPage.getClass()) {
-        mPageStack.removeLastOccurrence(oldPage);
-        mContainerView.removeView(oldPage.getView());
-        oldPage.onDetach();
-        oldPage.onHidden();
-
-      } else {
-        oldPage.onCovered();
-      }
-    }
-
-    if (animated && mPageAnimator != null && !newPage.onPushPageAnimation(oldPage, newPage, hint)) {
-      mPageAnimator.onPushPageAnimation(oldPage, newPage, hint);
+    if (animated && mPageAnimator != null && !newPage.onPushPageAnimation(oldPage, newPage, animationDirection)) {
+      mPageAnimator.onPushPageAnimation(oldPage, newPage, animationDirection);
     }
 
     int animationDuration = newPage.getAnimationDuration();
@@ -126,37 +209,51 @@ public class PageManager {
       newPage.postDelayed(new Runnable() {
         @Override
         public void run() {
-          hideOldPageIfNeeded(oldPage, newPage);
-
-          newPage.onShown(arg);
+          doFinalWorkForPushPage(oldPage, newPage, arg);
         }
       }, animationDuration);
     } else {
-      hideOldPageIfNeeded(oldPage, newPage);
-
-      newPage.onShown(arg);
+      doFinalWorkForPushPage(oldPage, newPage, arg);
     }
   }
 
-  private void hideOldPageIfNeeded(Page oldPage, Page newPage) {
-    if (oldPage != null && newPage.getType() != Page.TYPE.TYPE_DIALOG) {
-      oldPage.getView().setVisibility(View.GONE);
+  private void doFinalWorkForPushPage(Page oldPage, Page newPage, Object arg) {
+    if (newPage == getTopPage()) {
+      newPage.getView().bringToFront();
     }
+
+    if (oldPage != null) {
+      if (newPage.getType() != Page.TYPE.TYPE_DIALOG) {
+        oldPage.getView().setVisibility(View.GONE);
+      }
+
+      oldPage.onCovered();
+    }
+
+    newPage.onShown(arg);
+    newPage.getView().requestFocus();
+    mAnimating = false;
   }
 
   public void popPage(boolean animated) {
-    popPage(animated, false);
+    popTopNPages(1, animated);
   }
 
   /**
    * @param animated true to animate the transition
-   * @param hint     true=left, false=right
    */
-  public void popPage(boolean animated, boolean hint) {
-    popTopNPages(1, animated, hint);
+  public void popPage(boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    popTopNPages(1, animated, animationDirection);
   }
 
-  public void popTopNPages(int n, boolean animated, boolean hint) {
+  public void popTopNPages(int n, boolean animated) {
+    popTopNPages(n, animated, PageAnimator.AnimationDirection.FROM_LEFT);
+  }
+
+  public void popTopNPages(int n, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (mAnimating) {
+      return;
+    }
     if (n <= 0 || mPageStack.size() <= 0) {
       return;
     }
@@ -166,20 +263,20 @@ public class PageManager {
 
     while (--n >= 0) {
       Page page = mPageStack.removeLast();
+      page.onHide();
       mContainerView.removeView(page.getView());
-      page.onDetach();
       page.onHidden();
 
-      if (DEBUG) {
+      if (mEnableDebug) {
         Log.d(TAG, String.format(">>>> popPage, pagestack=%d, %s", mPageStack.size(), page));
       }
     }
 
-    popPageInternal(oldPage, animated, hint);
+    popPageInternal(oldPage, animated, animationDirection);
   }
 
   public void popToPage(Page destPage, boolean animated) {
-    popToPage(destPage, animated, false);
+    popToPage(destPage, animated, PageAnimator.AnimationDirection.FROM_LEFT);
   }
 
   /**
@@ -188,9 +285,11 @@ public class PageManager {
    *
    * @param destPage page as the destination for this pop operation
    * @param animated true to animate the transition
-   * @param hint used by the PageAnimator
    */
-  public void popToPage(Page destPage, boolean animated, boolean hint) {
+  public void popToPage(Page destPage, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (mAnimating) {
+      return;
+    }
     if (destPage == null) {
       throw new IllegalArgumentException("cannot call popToPage() with null destPage.");
     }
@@ -201,7 +300,7 @@ public class PageManager {
 
     Page oldPage = mPageStack.removeLast();
 
-    if (DEBUG) {
+    if (mEnableDebug) {
       Log.d(TAG, String.format(">>>> popPage, pagestack=%d, %s", mPageStack.size(), oldPage));
     }
 
@@ -211,16 +310,16 @@ public class PageManager {
       }
 
       Page page = mPageStack.removeLast();
+      page.onHide();
       mContainerView.removeView(page.getView());
-      page.onDetach();
       page.onHidden();
     }
 
-    popPageInternal(oldPage, animated, hint);
+    popPageInternal(oldPage, animated, animationDirection);
   }
 
   public void popToClass(Class<? extends Page> pageClass, boolean animated) {
-    popToClass(pageClass, animated, false);
+    popToClass(pageClass, animated, PageAnimator.AnimationDirection.FROM_LEFT);
   }
 
   /**
@@ -228,19 +327,18 @@ public class PageManager {
    * if the class is not found, the method call is a no-op
    *
    * @param pageClass class of page as the destination for this pop operation
-   * @param animated true to animate the transition
-   * @param hint used by the PageAnimator
+   * @param animated  true to animate the transition
    */
-  public void popToClass(Class<? extends Page> pageClass, boolean animated, boolean hint) {
+  public void popToClass(Class<? extends Page> pageClass, boolean animated, PageAnimator.AnimationDirection animationDirection) {
     if (pageClass == null) {
       throw new IllegalArgumentException("cannot call popToClass() with null pageClass.");
     }
 
-    popToClasses(new Class[]{pageClass}, animated, hint);
+    popToClasses(new Class[]{pageClass}, animated, animationDirection);
   }
 
   public void popToClasses(Class<? extends Page>[] pageClasses, boolean animated) {
-    popToClasses(pageClasses, animated, false);
+    popToClasses(pageClasses, animated, PageAnimator.AnimationDirection.FROM_LEFT);
   }
 
   /**
@@ -248,10 +346,12 @@ public class PageManager {
    * if none of the classes is found, the method call is a no-op
    *
    * @param pageClasses classes of pages as the destination for this pop operation
-   * @param animated true to animate the transition
-   * @param hint used by the PageAnimator
+   * @param animated    true to animate the transition
    */
-  public void popToClasses(Class<? extends Page>[] pageClasses, boolean animated, boolean hint) {
+  public void popToClasses(Class<? extends Page>[] pageClasses, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (mAnimating) {
+      return;
+    }
     if (pageClasses == null || pageClasses.length == 0) {
       throw new IllegalArgumentException("cannot call popToClasses() with null or empty pageClasses.");
     }
@@ -260,7 +360,7 @@ public class PageManager {
       return;
     }
 
-    // is topPage the page we want to navigate to? if so, we do not need to do anything
+    // do nothing if the topPage is the page we want to navigate to
     Class topPageClass = mPageStack.peekLast().getClass();
     for (Class pageClass : pageClasses) {
       if (pageClass == topPageClass) {
@@ -268,7 +368,7 @@ public class PageManager {
       }
     }
 
-    // the page we want to navigate to does not exist? if so, we do not need to do anything
+    // do nothing if the page we want to navigate to does not exist
     boolean hasDestClass = false;
     Iterator<Page> it = mPageStack.descendingIterator();
 
@@ -300,31 +400,41 @@ public class PageManager {
       }
 
       Page page = mPageStack.removeLast();
+      page.onHide();
       mContainerView.removeView(page.getView());
-      page.onDetach();
       page.onHidden();
     }
 
-    popPageInternal(oldPage, animated, hint);
+    popPageInternal(oldPage, animated, animationDirection);
   }
 
-  private void popPageInternal(final Page removedPage, boolean animated, boolean hint) {
+  private void popPageInternal(final Page removedPage, boolean animated, PageAnimator.AnimationDirection animationDirection) {
+    if (mEnableDebug) {
+      Log.d(TAG, String.format(">>>> popPage, pagestack=%d, %s", mPageStack.size(), removedPage));
+    }
+
+    removedPage.onHide();
+
     final Page prevPage;
     if (mPageStack.size() > 0) {    // this check is always necessary
       prevPage = mPageStack.getLast();
+      prevPage.onUncover(removedPage.getReturnData());
 
-      if (animated && mPageAnimator != null && !removedPage.onPopPageAnimation(removedPage, prevPage, hint)) {
-        mPageAnimator.onPopPageAnimation(removedPage, prevPage, hint);
+      if (animated && mPageAnimator != null && !removedPage.onPopPageAnimation(removedPage, prevPage, animationDirection)) {
+        mPageAnimator.onPopPageAnimation(removedPage, prevPage, animationDirection);
       }
 
       prevPage.getView().setVisibility(View.VISIBLE);
     } else {
       prevPage = null;
 
-      if (animated && mPageAnimator != null && !removedPage.onPopPageAnimation(removedPage, null, hint)) {
-        mPageAnimator.onPopPageAnimation(removedPage, null, hint);
+      if (animated && mPageAnimator != null && !removedPage.onPopPageAnimation(removedPage, null, animationDirection)) {
+        mPageAnimator.onPopPageAnimation(removedPage, null, animationDirection);
       }
     }
+
+    mViewTransparentMask.bringToFront();
+    mCurPage = prevPage;
 
     int animationDuration = removedPage.getAnimationDuration();
     if (animationDuration == -1 && mPageAnimator != null) {
@@ -345,11 +455,12 @@ public class PageManager {
 
   private void doFinalWorkForPopPageInternal(Page removedPage, Page prevPage) {
     mContainerView.removeView(removedPage.getView());
-    removedPage.onDetach();
     removedPage.onHidden();
-    mCurPage = prevPage;
 
     if (prevPage != null) {
+      if (prevPage == getTopPage()) {
+        prevPage.getView().bringToFront();
+      }
       prevPage.onUncovered(removedPage.getReturnData());
     }
   }
@@ -384,10 +495,10 @@ public class PageManager {
     // we do not pop the last page, let the activity handle this BACK-press
     if (getPageCount() > 1) {
       if (mCurPage.getType() == Page.TYPE.TYPE_DIALOG) {
-        popPage(false, false);  // for pages of DIALOG type, do not apply animation.
+        popPage(false);  // for pages of DIALOG type, do not apply animation.
 
       } else {
-        popPage(true, true);
+        popPage(true);
       }
 
       return true;
@@ -416,6 +527,7 @@ public class PageManager {
 
   public void onDestroy() {
     if (mCurPage != null) {
+      mCurPage.onHide();
       // we do not pop the top page, we simply call onHidden on it
       mCurPage.onHidden();
     }
@@ -458,9 +570,11 @@ public class PageManager {
     String[] clazzArray = new String[mPageStack.size()];
     for (int i = 0; i < mPageStack.size(); ++i) {
       Page p = mPageStack.get(i);
-      p.onSaveInstanceState(outState);
+      if (p.shouldSaveInstanceState()) {
+        p.onSaveInstanceState(outState);
 
-      clazzArray[i] = p.getClass().getName();
+        clazzArray[i] = p.getClass().getName();
+      }
     }
     outState.putStringArray(SAVE_PAGE_STACK_KEY, clazzArray);
   }
@@ -472,13 +586,13 @@ public class PageManager {
       for (int i = 0; i < clazzArray.length; ++i) {
         clazz = Class.forName(clazzArray[i]);
         Constructor ctor = clazz.getDeclaredConstructor(PageActivity.class);
-        Page p = (Page)ctor.newInstance(mPageActivity);
+        Page p = (Page) ctor.newInstance(mPageActivity);
         pushPage(p);
 
         p.onRestoreInstanceState(savedInstanceState);
       }
     } catch (NoSuchMethodException e) {
-      throw new RuntimeException("No <init>(PageActivity) constructor in Page: " + clazz.getName()
+      Log.e("PageManager", "No <init>(PageActivity) constructor in Page: " + clazz.getName()
           + ", which is required for page restore/recovery to work.");
 
     } catch (Exception e) {
