@@ -2,7 +2,30 @@
 
 Paginize
 ========
-Paginize is a light-weight application framework for Android, it provides an intuitive programming model for writing Android applications. Paginize models a screen as a `Page` or part of the screen as an `InnerPage`, which in essence are just view wrappers. Paginize breaks down complex user interfaces into smaller units, provides APIs for easily handling page navigations, and offers flexibility for Page inheritance and **layout inheritance**, which push code reuse in Android to another level.
+Scan the QRCode to install the demo APK and get a feel of how it works!
+
+![PaginizeDemo](https://github.com/neevek/Paginize/raw/master/DemoAPK/paginize_demo.gif)
+
+[![PaginizeDemo](https://github.com/neevek/Paginize/raw/master/DemoAPK/PaginizeQRCode.png)](https://github.com/neevek/Paginize/raw/master/DemoAPK/PaginizeDemo.apk)
+
+Description
+========
+Paginize is a light-weight application framework for Android. It was designed to accelerate development cycles and make maintenance easier, it provides an intuitive programming model for writing Android applications. Paginize models a screen as a `Page` or part of the screen as an `InnerPage`, which in essence are just view wrappers. Paginize breaks down complex user interfaces into smaller units, provides APIs for easily handling page navigations, and offers flexibility for page inheritance and **layout inheritance**, which pushes code reuse in Android to another level.
+
+
+Installation
+============
+
+```
+compile 'net.neevek.android:paginize:0.6.13'
+```
+
+To to make your life easier, some useful implementations(`BasePage`、`OptionMenuPage`, etc.) are provided, include the following dependency to use it.
+The following dependency is not required to use Paginize itself. See the demo for details.
+
+```
+compile 'net.neevek.android:paginize-contrib:0.0.1'
+```
 
 Documentation
 =============
@@ -19,122 +42,136 @@ Documentation
 1. Create a layout file(res/layout/page_frame.xml) for FramePage:
 
 ```xml
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- for brevity, referenced resources are not shown here. see the demo-->
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.design.widget.CoordinatorLayout
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:fitsSystemWindows="true"
+  android:background="#fff"
+  >
+  <android.support.design.widget.AppBarLayout
+    android:id="@+id/appBar"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
-    android:background="#ffe6e6e6">
+    android:layout_height="wrap_content"
+    android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+    >
+    <android.support.v7.widget.Toolbar
+      android:id="@+id/tb_header_bar"
+      android:layout_width="match_parent"
+      android:layout_height="?attr/actionBarSize"
+      app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+      />
+  </android.support.design.widget.AppBarLayout>
 
-    <TextView
-        android:id="@+id/tv_back"
-        android:layout_width="wrap_content"
-        android:layout_height="fill_parent"
-        android:layout_alignParentLeft="true"
-        android:layout_gravity="center"
-        android:gravity="center"
-        android:paddingLeft="10dip"
-        android:paddingRight="10dip"
-        android:text="Back"
-        />
+  <FrameLayout
+    android:id="@+id/layout_content_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    />
 
-    <TextView
-        android:id="@+id/tv_title"
-        style="@style/top_bar_title_center"
-        android:layout_marginLeft="72dip"
-        android:layout_marginRight="72dip"
-        android:singleLine="true"
-        android:text="Title" />
+  <ViewStub
+    android:id="@+id/stub_loading_layout"
+    android:layout="@layout/layout_loading"
+    android:inflatedId="@+id/layout_loading"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_marginTop="?attr/actionBarSize"
+    />
 
-    <RelativeLayout
-        android:id="@+id/container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_marginTop="@dimen/header_bar_height"
-        />
-
-</RelativeLayout>
+  <ViewStub
+    android:id="@+id/stub_error_layout"
+    android:layout="@layout/layout_error"
+    android:inflatedId="@+id/layout_error"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_marginTop="?attr/actionBarSize"
+    />
+</android.support.design.widget.CoordinatorLayout>
 ```
 
-2. Create the FramePage, this page will be inherited by other pages that need a header(title bar) with a BACK button and a title: 
+2. Create FramePage, this page will be inherited by other pages that need a ToolBar
 
 ```java
 @PageLayout(R.layout.page_frame)
-public abstract class FramePage extends Page implements View.OnClickListener {
-    @InjectView(value = R.id.tv_back, listenerTypes = {View.OnClickListener.class}) 
-    private TextView mTvBack;
+public abstract class FramePage extends Page {
+  @InjectView(R.id.tb_header_bar)
+  private Toolbar mTbToolbar;
 
-    @InjectView(R.id.tv_title) 
-    private TextView mTvTitle;
+  public FramePage(PageActivity pageActivity) {
+    super(pageActivity);
 
-    public FramePage(PageActivity pageActivity) {
-        super(pageActivity);
-    }
-
-    protected void setBackButtonVisibility(int visibility) {
-        mTvBack.setVisibility(visibility);
-    }
-
-    protected void enableBackButton(boolean enable) {
-        mTvBack.setEnabled(enable);
-    }
-
-    protected void setBackButtonText(String text) {
-        mTvBack.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
-        mTvBack.setText(text);
-    }
-
-    protected void setTitleText(String text) {
-        mTvTitle.setText(text);
-    }
-
-    protected void onBackButtonClicked() {
-        hide(true, true);
-    }
-
-    @Override
-    public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.tv_back:
-                onBackButtonClicked();
-            break;
+    if (getContext().getPageCount() > 0) {
+      ToolbarHelper.setNavigationIconEnabled(mTbToolbar, true, new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          onNavigationIconClicked(v);
         }
+      });
     }
+  }
+
+  protected final void setupMenu(@MenuRes int menuResId) {
+    ToolbarHelper.setupMenu(mTbToolbar, menuResId, new Toolbar.OnMenuItemClickListener() {
+      @Override
+      public boolean onMenuItemClick(MenuItem item) {
+        return FramePage.this.onMenuItemClick(item);
+      }
+    });
+  }
+
+  protected void onNavigationIconClicked(View v) {
+    hide(true);
+  }
+
+  protected boolean onMenuItemClick(MenuItem item) {
+    return false;
+  }
+
+  protected final Toolbar getToolbar() {
+    return mTbToolbar;
+  }
 }
+
 ```
 
 3. Create another layout(page_test.xml) for TestPage, this page contains only a TextView:
 
 ```xml
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/tv_content"
-    android:layout_width="fill_parent"
-    android:layout_height="fill_parent"
-    android:gravity="center"
-    android:padding="10dip"
-    />
-`````
+<TextView
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/tv_content"
+  android:layout_width="fill_parent"
+  android:layout_height="fill_parent"
+  android:gravity="center"
+  android:padding="10dip"
+  />
+```
 
-4. Create the TestPage:
+4. Create TestPage:
 
 ```java
-// here we inherit the layout from FramePage, i.e. R.layout.page_frame, insert R.layout.page_test
-// into the R.id.container element of the parent layout. Since we subclass FramePage, we also inherit
-// the code for handling the BACK button press
-@InsertPageLayout(value = R.layout.page_test, parent = R.id.container)
+// here we inherit the layout from FramePage, i.e. R.layout.page_frame,
+// insert R.layout.page_test into the R.id.container element of the parent
+// layout. Since we subclass FramePage, we also inherit the code for handling
+// the BACK button press
+@InsertPageLayout(value = R.layout.page_test, parent = R.id.layout_content_container)
 public class TestPage extends FramePage {
     @InjectView(R.id.tv_content)
     private TextView mTvContent;
 
     public TestPage(PageActivity pageActivity) {
-        super(pageActivity);
-
-        mTvContent.setText("Hello Paginize!");
+      super(pageActivity);
+      mTvContent.setText("Hello Paginize!");
     }
 }
 ```
 
-After the steps above, TestPage is a page that contains a titlebar with a BACK button on the 
-top-left corner and a TextView as the content at the center. As you can see, we don't
-need to repeat the boilterplate code for setting up the views of FramePage. **Page inherited, its layout is inherited as well.**
+After the steps above, TestPage is a page that contains a ToolBar. As you can see, we don't
+need to repeat the boilerplate code for setting up the views of FramePage. **Page inherited, its layout is inherited as well.**
 
 5. Create an Activity that extends PageActivity, and show the TestPage:
 
@@ -144,8 +181,8 @@ public class MainActivity extends PageActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        new TestPage(this).show(null, true);
+        // pass true to animate the transition
+        new TestPage(this).show(true);
     }
 }
 ```
@@ -156,7 +193,7 @@ complicated applications, you see the advantages of it when you use it to struct
 
 ####<a name="header2"></a> 2. The lifecycle methods
 
-Page (including Page, InnerPage) subclasses `ViewWrapper`, lifecycle methods are delcared in this class:
+Page (including Page and InnerPage) subclasses `ViewWrapper`, lifecycle methods are declared in this class:
 
 * onShow()
     - The page is ready to be shown, but not yet attached to the view hierarchy
@@ -169,7 +206,7 @@ Page (including Page, InnerPage) subclasses `ViewWrapper`, lifecycle methods are
 * onHide()
     - The page is *ready to be* hidden, i.e., it is about to be popped out from the page stack.
 * onHidden()
-    - The page is hidden, i.e., it is popped out from the page stack, detached from the view hierarchy. 
+    - The page is hidden, i.e., it is popped out from the page stack, detached from the view hierarchy.
 
 
 When a page is popped, it is ready be to garbage collected, because for most cases no one references the page at this point, but **you could**, that means if you keep a reference to the page, you can call show()/hide() pair multiple times to reuse the page. And that is why the method is named **onHidden()** instead of *onDestroy()*, because the framework will not know whether it is destroyed.
@@ -183,22 +220,24 @@ Paginize takes advantage of Java Annotations to make use of the framework easier
 * `@PageLayout`
     - Annotated on pages, specifies a layout resource id for the current page.
 * `@InsertPageLayout`
-    - Used in layout inheritance, annotated on pages, specifies a layout resource id to be inserted into the inherited layout, there is an optional `parent` field which can specify a parent element for the inserted layout. if the `parent` field is ommitted, the inserted layout will be added as the last element(s) of the inherited layout. Note, the layout specified for this annotation can be enclosed with the `<merge>` tag.
+    - Used in layout inheritance, annotated on pages, specifies a layout resource id to be inserted into the inherited layout, there is an optional `parent` field which can specify a parent element for the inserted layout. if the `parent` field is omitted, the inserted layout will be added as the last element(s) of the inherited layout. Note, the layout specified for this annotation can be enclosed with the `<merge>` tag.
 * `@InnerPageContainerLayoutResId`
     - Annotated on pages that subclass `ContainerPage`, which is normally used to implement tabbed UI(forget about TabHost :). This annotation specifies resource id(normally a ViewGroup or subclass of ViewGroup) in the layout specified with `@PageLayout`, regardless of whether it is specified directly or inherited. In the current container page, you can call `setInnerPage()` to insert an `InnerPage`, which will be added to the layout element specified by this annotation.
 * `@InjectView`
-    - Annotated on views declared in page, for most cases, the injection happens when the page is instantiated, but if you set the `lazy` field to `true`, injection may be triggered when the `lazyInitializeLayout()` method is called. This annotation also has `listenerTypes` and `listener` feilds to support setting listeners for the injected view.
+    - Annotated on views declared in page, for most cases, the injection happens when the page is instantiated, but if you set the `lazy` field to `true`, injection may be triggered when the `lazyInitializeLayout()` method is called. This annotation also has `listenerTypes` and `listener` fields to support setting listeners for the injected view.
 * `@ListenerDefs` and `@SetListeners`
     - `@ListenerDefs` should be annotated on page constructors, it contains an array of `@SetListeners`, which is introduced to support setting up listeners for views in one place, make all Paginize-powered code consistent. It is normally used when you only want to setup listeners for the views, but do not need to keep references to the views, besides that, `@SetListeners` is same as `@InjectView`.
 * `@InjectPageAnimator`
-    - Annotated on Activity that subclasses `PageActivity`, offers page transition annimation for page push/pop. `PageAnimator` can be customized, simply subclass `PageAnimator` and override the required methods to create your own page transition annimation.
+    - Annotated on Activity that subclasses `PageActivity`, offers page transition animation for page push/pop. `PageAnimator` can be customized, simply subclass `PageAnimator` and override the required methods to create your own page transition animation.
 * `@ListenerMarker`
     - Annotated on listener class used for the `listener` field of `@InjectView` or `@SetListeners`, this annotation is introduced to prevent the listener class from being obfuscated by proguard. Note, add a rule in proguard-project.txt to make this annotation take effect.
 
 
 ####<a name="header4"></a> 4. Argument passing between pages
 
-`onShow()` and `onShown()` take an object as arugment, which is passed from the `show()` method call. `onUncover()` and `onUncovered()` take an object argument as well, which is passed from the top page by calling `setReturnData()` before it is popped from the page stack. This is all that Pagenize offers for argument passing between pages. But, you are not limited to that, and I recommend against using `show()` to pass arguments(hmmm, the mechanism exists for historical reasons). I recommend simply put methods like `setArgumentXYZ` in the destination page, call these methods to pass arguments to the page, (you can even pass a callback to the destination page, which in some cases may be very useful), this is more intuitive. And if you stick to a certain pattern or naming convention, code will be more manageable with this approach.
+For passing arguments to a newly created page, use `getBundle`, and set arguments in the returned bundle. Paginize will save the bundle associated with each Page during `onSaveInstanceState`, and restore it during `onRestoreInstanceState`, which means no extra work needed for saving and restoring arguments during page recreation, the bundle will be ready in `onShow` and lifecycle methods after that.
+For navigating back from a page, `onUncover()` and `onUncovered()` can be used to receive arguments from the popped page, these two methods take an object as argument, which is passed from the top page set with `setReturnData()` before it is popped from the page stack.
+
 
 ####<a name="header5"></a> 5. Proguard rules
 
@@ -212,7 +251,6 @@ To prevent annotated classes and fields from being stripped away, the following 
 }
 
 ```
-
 Note
 ====
 The project is still *NOT* stable, APIs may change(but not significantly).
@@ -226,7 +264,7 @@ Please fork this repository and contribute back using [pull requests](https://gi
 
 Under MIT license
 =================
-
 ```
-Copyright (c) 2014 - 2015 neevek <i@neevek.net>
+Copyright (c) 2014 neevek <i@neevek.net>
 See the file license.txt for copying permission.
+```
